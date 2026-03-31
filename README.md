@@ -41,6 +41,16 @@ The menu bar updates within 30 seconds of each Claude Code API response.
 
 ## Troubleshooting
 
+**macOS says the app is "damaged"**
+
+Since UsageBar is not code-signed, Gatekeeper may block it. Run:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/UsageBar.app
+```
+
+Then open the app again.
+
 **The bar doesn't update**
 
 Run Claude Code at least once — the app reads from `~/.claude/rate_limits_cache.json` which Claude Code writes automatically. Logs are written to `~/.claude/usagebar.log`.
