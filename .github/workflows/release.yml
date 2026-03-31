@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Package app bundle
+        run: |
+          BUNDLE="UsageBar.app"
+          mkdir -p "$BUNDLE/Contents/MacOS"
+          mkdir -p "$BUNDLE/Contents/Resources"
+          cp .build/release/UsageBar "$BUNDLE/Contents/MacOS/UsageBar"
+          cp Info.plist "$BUNDLE/Contents/Info.plist"
+          cp Resources/AppIcon.icns "$BUNDLE/Contents/Resources/AppIcon.icns"
+          chmod +x "$BUNDLE/Contents/MacOS/UsageBar"
+          zip -r "UsageBar.zip" "$BUNDLE"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: UsageBar.zip
+          generate_release_notes: true
