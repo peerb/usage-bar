@@ -20,6 +20,14 @@ Two slim vertical bars in your menu bar — one for the 5-hour window, one for t
 
 ## Install
 
+**Via Homebrew (recommended)**
+
+```bash
+brew install --cask peerb/tap/usagebar
+```
+
+**From source**
+
 ```bash
 git clone https://github.com/peerb/usage-bar
 cd usage-bar
