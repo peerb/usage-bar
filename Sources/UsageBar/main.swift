@@ -436,6 +436,12 @@ extension AppDelegate {
 
 // MARK: - Entry Point
 
+// Prevent multiple instances
+let runningInstances = NSRunningApplication.runningApplications(withBundleIdentifier: "com.usagebar")
+if runningInstances.count > 1 {
+    exit(0)
+}
+
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
