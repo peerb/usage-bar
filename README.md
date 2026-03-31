@@ -26,7 +26,7 @@ cd usage-bar
 ./install.sh
 ```
 
-The script builds the binary, packages it as a `.app` bundle in `~/Applications/`, and registers a LaunchAgent so it starts automatically at login.
+The script builds the binary, packages it as a `.app` bundle in `~/Applications/`, clears the Gatekeeper quarantine flag, and launches the app. On first start, the app registers itself to launch automatically at login.
 
 Once installed you can open it anytime from Spotlight (`⌘ Space` → `UsageBar`) or Finder. It runs in the menu bar only — no Dock icon.
 
@@ -34,28 +34,13 @@ The menu bar updates within 30 seconds of each Claude Code API response.
 
 ## Troubleshooting
 
-**macOS blocks the app on first launch**
-
-Since the app is not code-signed, Gatekeeper may prevent it from opening. Run this after installing:
-
-```bash
-xattr -dr com.apple.quarantine ~/Applications/UsageBar.app
-```
-
-Then reload the LaunchAgent:
-
-```bash
-launchctl unload ~/Library/LaunchAgents/com.usagebar.plist
-launchctl load ~/Library/LaunchAgents/com.usagebar.plist
-```
-
 **The bar doesn't update**
 
 Run Claude Code at least once — the app reads from `~/.claude/rate_limits_cache.json` which Claude Code writes automatically. Logs are written to `~/.claude/usagebar.log`.
 
 ## Forking
 
-The bundle identifier `com.usagebar` appears in `Info.plist`, `install.sh`, and `Sources/UsageBar/main.swift`. If you fork this project, replace all occurrences with your own identifier to avoid LaunchAgent conflicts with the original.
+The bundle identifier `com.usagebar` appears in `Info.plist` and `Sources/UsageBar/main.swift`. If you fork this project, replace all occurrences with your own identifier to avoid LaunchAgent conflicts with the original.
 
 ## Uninstall
 
