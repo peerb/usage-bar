@@ -45,9 +45,7 @@ The bundle identifier `com.usagebar` appears in `Info.plist` and `Sources/UsageB
 ## Uninstall
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.usagebar.plist
-rm ~/Library/LaunchAgents/com.usagebar.plist
-rm -rf ~/Applications/UsageBar.app
+./uninstall.sh
 ```
 
 ## License
