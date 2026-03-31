@@ -251,6 +251,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "◆"
+        if !launchAgent.isEnabled {
+            launchAgent.enable(binaryPath: ProcessInfo.processInfo.arguments[0])
+        }
         refreshUI()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             self?.refreshUI()
