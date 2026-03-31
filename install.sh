@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BINARY_NAME="UsageBar"
 BUNDLE_NAME="UsageBar.app"
-APP_DIR="$HOME/Applications"
+APP_DIR="/Applications"
 BUNDLE="$APP_DIR/$BUNDLE_NAME"
 BINARY_IN_BUNDLE="$BUNDLE/Contents/MacOS/$BINARY_NAME"
 
