@@ -15,7 +15,6 @@ Two slim vertical bars in your menu bar — one for the 5-hour window, one for t
 ## Requirements
 
 - macOS 12 or later
-- Xcode Command Line Tools (`xcode-select --install`)
 - [Claude Code](https://claude.ai/code)
 
 ## Install
@@ -26,7 +25,7 @@ Two slim vertical bars in your menu bar — one for the 5-hour window, one for t
 brew install --cask peerb/tap/usagebar
 ```
 
-**From source**
+**From source** (requires [Xcode Command Line Tools](https://developer.apple.com/xcode/resources/))
 
 ```bash
 git clone https://github.com/peerb/usage-bar
