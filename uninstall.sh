@@ -2,7 +2,7 @@
 set -e
 
 PLIST="$HOME/Library/LaunchAgents/com.usagebar.plist"
-BUNDLE="$HOME/Applications/UsageBar.app"
+BUNDLE="/Applications/UsageBar.app"
 
 launchctl unload "$PLIST" 2>/dev/null || true
 rm -f "$PLIST"
