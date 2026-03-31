@@ -213,8 +213,6 @@ final class LaunchAgentManager {
             </array>
             <key>RunAtLoad</key>
             <true/>
-            <key>KeepAlive</key>
-            <true/>
             <key>StandardErrorPath</key>
             <string>\(logPath)</string>
         </dict>
