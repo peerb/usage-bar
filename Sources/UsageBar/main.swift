@@ -1,9 +1,11 @@
 import AppKit
 import Foundation
+import Security
 
 // MARK: - Custom Menu Item Views
 
 private let kMenuWidth: CGFloat = 270
+private let kMenuPadding: CGFloat = 17
 
 /// Simple progress bar drawn via drawRect to avoid layer timing issues
 final class ProgressBarView: NSView {
@@ -38,15 +40,15 @@ final class MenuHeaderItemView: NSView {
         tl.translatesAutoresizingMaskIntoConstraints = false
         addSubview(tl)
         NSLayoutConstraint.activate([
-            tl.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            tl.leadingAnchor.constraint(equalTo: leadingAnchor, constant: kMenuPadding),
             tl.centerYAnchor.constraint(equalTo: centerYAnchor),
-            tl.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            tl.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -kMenuPadding),
         ])
     }
     required init?(coder: NSCoder) { fatalError() }
 }
 
-/// Secondary gray text row (like "Power Source: Power Adapter")
+/// Secondary gray text row
 final class MenuSubtitleItemView: NSView {
     init(_ text: String) {
         let lbl = NSTextField(labelWithString: text)
@@ -56,8 +58,8 @@ final class MenuSubtitleItemView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: kMenuWidth, height: 18))
         addSubview(lbl)
         NSLayoutConstraint.activate([
-            lbl.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            lbl.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            lbl.leadingAnchor.constraint(equalTo: leadingAnchor, constant: kMenuPadding),
+            lbl.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -kMenuPadding),
             lbl.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
@@ -73,7 +75,7 @@ final class MenuRateLimitItemView: NSView {
         labelField.font = .systemFont(ofSize: 13)
         labelField.textColor = .labelColor
 
-        let pctField = NSTextField(labelWithString: String(format: "%.0f %%", pct))
+        let pctField = NSTextField(labelWithString: String(format: "%.0f%%", pct))
         pctField.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
         pctField.textColor = .labelColor
         pctField.alignment = .right
@@ -91,21 +93,18 @@ final class MenuRateLimitItemView: NSView {
         }
 
         NSLayoutConstraint.activate([
-            // Top row: label left, pct right
-            labelField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            labelField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: kMenuPadding),
             labelField.topAnchor.constraint(equalTo: topAnchor, constant: 7),
-            pctField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            pctField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -kMenuPadding),
             pctField.topAnchor.constraint(equalTo: topAnchor, constant: 7),
             pctField.leadingAnchor.constraint(greaterThanOrEqualTo: labelField.trailingAnchor, constant: 8),
 
-            // Progress bar below label row
-            bar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            bar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            bar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: kMenuPadding),
+            bar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -kMenuPadding),
             bar.topAnchor.constraint(equalTo: labelField.bottomAnchor, constant: 5),
             bar.heightAnchor.constraint(equalToConstant: 3),
 
-            // Detail text below bar
-            detailField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            detailField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: kMenuPadding),
             detailField.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 3),
             detailField.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
         ])
@@ -113,7 +112,7 @@ final class MenuRateLimitItemView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 }
 
-// MARK: - Data Models
+// MARK: - Cache Data Models
 
 struct RateLimitWindow: Codable {
     let usedPercentage: Double
@@ -152,26 +151,15 @@ struct CachedStatus: Codable {
 
     struct ModelInfo: Codable {
         let displayName: String?
-
-        enum CodingKeys: String, CodingKey {
-            case displayName = "display_name"
-        }
+        enum CodingKeys: String, CodingKey { case displayName = "display_name" }
     }
-
     struct ContextWindow: Codable {
         let usedPercentage: Double?
-
-        enum CodingKeys: String, CodingKey {
-            case usedPercentage = "used_percentage"
-        }
+        enum CodingKeys: String, CodingKey { case usedPercentage = "used_percentage" }
     }
-
     struct CostInfo: Codable {
         let totalCostUsd: Double?
-
-        enum CodingKeys: String, CodingKey {
-            case totalCostUsd = "total_cost_usd"
-        }
+        enum CodingKeys: String, CodingKey { case totalCostUsd = "total_cost_usd" }
     }
 }
 
@@ -184,6 +172,97 @@ final class StatusCache {
     func load() -> CachedStatus? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(CachedStatus.self, from: data)
+    }
+}
+
+// MARK: - Keychain
+
+final class KeychainReader {
+    struct Credentials: Decodable {
+        let claudeAiOauth: OAuthToken
+        struct OAuthToken: Decodable {
+            let accessToken: String
+            let subscriptionType: String?
+        }
+    }
+
+    static func load() -> Credentials? {
+        var item: CFTypeRef?
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: "Claude Code-credentials",
+            kSecReturnData: true,
+            kSecMatchLimit: kSecMatchLimitOne,
+        ]
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data else { return nil }
+        return try? JSONDecoder().decode(Credentials.self, from: data)
+    }
+}
+
+// MARK: - OAuth Usage
+
+struct OAuthWindow {
+    let usedPercentage: Double
+    let resetsAt: Date
+}
+
+struct OAuthUsage {
+    let fiveHour: OAuthWindow?
+    let sevenDay: OAuthWindow?
+    let sevenDaySonnet: OAuthWindow?
+    let fetchedAt: Date
+}
+
+final class OAuthUsageFetcher {
+    private struct Response: Decodable {
+        let fiveHour: Window?
+        let sevenDay: Window?
+        let sevenDaySonnet: Window?
+        struct Window: Decodable {
+            let utilization: Double
+            let resetsAt: String
+            enum CodingKeys: String, CodingKey {
+                case utilization
+                case resetsAt = "resets_at"
+            }
+        }
+        enum CodingKeys: String, CodingKey {
+            case fiveHour = "five_hour"
+            case sevenDay = "seven_day"
+            case sevenDaySonnet = "seven_day_sonnet"
+        }
+    }
+
+    private let dateFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    func fetch(accessToken: String, completion: @escaping (OAuthUsage?) -> Void) {
+        var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
+        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
+            guard let self, let data,
+                  let resp = try? JSONDecoder().decode(Response.self, from: data) else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            func parse(_ w: Response.Window?) -> OAuthWindow? {
+                guard let w else { return nil }
+                let date = self.dateFormatter.date(from: w.resetsAt) ?? Date()
+                return OAuthWindow(usedPercentage: w.utilization, resetsAt: date)
+            }
+            let usage = OAuthUsage(
+                fiveHour: parse(resp.fiveHour),
+                sevenDay: parse(resp.sevenDay),
+                sevenDaySonnet: parse(resp.sevenDaySonnet),
+                fetchedAt: Date()
+            )
+            DispatchQueue.main.async { completion(usage) }
+        }.resume()
     }
 }
 
@@ -244,6 +323,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let cache = StatusCache()
     private let launchAgent = LaunchAgentManager()
+    private let oauthFetcher = OAuthUsageFetcher()
+    private var credentials: KeychainReader.Credentials?
+    private var oauthUsage: OAuthUsage?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -252,8 +334,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if !launchAgent.isEnabled {
             launchAgent.enable(binaryPath: ProcessInfo.processInfo.arguments[0])
         }
+        credentials = KeychainReader.load()
         refreshUI()
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        // OAuth every 5 min, cache fallback reads happen inside refreshUI
+        timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             self?.refreshUI()
         }
     }
@@ -263,21 +347,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate {
     @objc func refreshUI() {
-        let status = cache.load()
-        updateTitle(from: status)
-        statusItem.menu = makeMenu(status: status)
+        // Show last known data immediately
+        updateTitle(fhPct: oauthUsage?.fiveHour?.usedPercentage,
+                    sdPct: oauthUsage?.sevenDay?.usedPercentage)
+        statusItem.menu = makeMenu(cachedStatus: oauthUsage == nil ? cache.load() : nil,
+                                   oauthUsage: oauthUsage)
+
+        // Fetch fresh OAuth data in background, fall back to cache if unavailable
+        guard let token = credentials?.claudeAiOauth.accessToken else { return }
+        oauthFetcher.fetch(accessToken: token) { [weak self] usage in
+            guard let self else { return }
+            if let usage {
+                self.oauthUsage = usage
+                self.updateTitle(fhPct: usage.fiveHour?.usedPercentage,
+                                 sdPct: usage.sevenDay?.usedPercentage)
+                self.statusItem.menu = self.makeMenu(cachedStatus: nil, oauthUsage: usage)
+            } else {
+                // OAuth failed — fall back to cache
+                let status = self.cache.load()
+                self.updateTitle(fhPct: status?.rateLimits?.fiveHour?.usedPercentage,
+                                 sdPct: status?.rateLimits?.sevenDay?.usedPercentage)
+                self.statusItem.menu = self.makeMenu(cachedStatus: status, oauthUsage: nil)
+            }
+        }
     }
 
-    func updateTitle(from status: CachedStatus?) {
-        let fhPct = status?.rateLimits?.fiveHour?.usedPercentage
-        let sdPct = status?.rateLimits?.sevenDay?.usedPercentage
-
+    func updateTitle(fhPct: Double?, sdPct: Double?) {
         guard fhPct != nil || sdPct != nil else {
             statusItem.button?.image = nil
             statusItem.button?.title = "◆"
+            statusItem.button?.contentTintColor = nil
             return
         }
-
+        let maxPct = [fhPct, sdPct].compactMap { $0 }.max() ?? 0
+        statusItem.button?.contentTintColor = maxPct > 90 ? .systemRed : maxPct > 70 ? .systemOrange : nil
         statusItem.button?.title = ""
         statusItem.button?.image = makeStatusImage(fhPct: fhPct, sdPct: sdPct)
         statusItem.button?.imagePosition = .imageOnly
@@ -326,84 +429,103 @@ extension AppDelegate {
 // MARK: - Menu
 
 extension AppDelegate {
-    func makeMenu(status: CachedStatus?) -> NSMenu {
+    func makeMenu(cachedStatus: CachedStatus?, oauthUsage: OAuthUsage?) -> NSMenu {
         let menu = NSMenu()
+        menu.addItem(viewItem(MenuHeaderItemView(title: planName())))
 
-        if let status {
+        if let usage = oauthUsage {
+            addWindowRows(to: menu,
+                fiveHour: (usage.fiveHour?.usedPercentage, usage.fiveHour?.resetsAt),
+                sevenDay: (usage.sevenDay?.usedPercentage, usage.sevenDay?.resetsAt),
+                sonnetPct: usage.sevenDaySonnet?.usedPercentage
+            )
+            addStaleItem(to: menu, updatedAt: usage.fetchedAt)
+
+        } else if let status = cachedStatus {
             if let rl = status.rateLimits {
-                menu.addItem(viewItem(MenuHeaderItemView(title: "Claude Usage")))
-
-                if let fh = rl.fiveHour {
-                    let detail = "5h window · resets \(timeUntil(Date(timeIntervalSince1970: fh.resetsAt)))"
-                    menu.addItem(viewItem(MenuRateLimitItemView(label: "5-Hour Window", pct: fh.usedPercentage, detail: detail)))
-                }
-                if let sd = rl.sevenDay {
-                    let detail = "7d window · resets \(timeUntil(Date(timeIntervalSince1970: sd.resetsAt)))"
-                    menu.addItem(viewItem(MenuRateLimitItemView(label: "7-Day Window", pct: sd.usedPercentage, detail: detail)))
-                }
-                menu.addItem(.separator())
+                addWindowRows(to: menu,
+                    fiveHour: (rl.fiveHour?.usedPercentage, rl.fiveHour.map { Date(timeIntervalSince1970: $0.resetsAt) }),
+                    sevenDay: (rl.sevenDay?.usedPercentage, rl.sevenDay.map { Date(timeIntervalSince1970: $0.resetsAt) }),
+                    sonnetPct: nil
+                )
             } else {
-                menu.addItem(viewItem(MenuHeaderItemView(title: "Claude Usage")))
                 menu.addItem(viewItem(MenuSubtitleItemView("No rate limit data yet")))
-                menu.addItem(.separator())
             }
-
             if let model = status.model?.displayName,
                let ctxPct = status.contextWindow?.usedPercentage {
-                menu.addItem(sectionHeader("Last Session"))
+                menu.addItem(.separator())
+                menu.addItem(viewItem(MenuSubtitleItemView("Last Session")))
                 menu.addItem(viewItem(MenuSubtitleItemView(model)))
                 if let cost = status.cost?.totalCostUsd {
                     menu.addItem(viewItem(MenuSubtitleItemView(String(format: "Context %.0f%%  ·  $%.4f", ctxPct, cost))))
                 } else {
                     menu.addItem(viewItem(MenuSubtitleItemView(String(format: "Context %.0f%%", ctxPct))))
                 }
-                menu.addItem(.separator())
+            }
+            if let updatedAt = status.updatedAt {
+                addStaleItem(to: menu, updatedAt: Date(timeIntervalSince1970: updatedAt))
             }
 
-            if let updatedAt = status.updatedAt {
-                let fmt = RelativeDateTimeFormatter()
-                fmt.unitsStyle = .full
-                let timeStr = fmt.localizedString(for: Date(timeIntervalSince1970: updatedAt), relativeTo: Date())
-                menu.addItem(viewItem(MenuSubtitleItemView("Updated \(timeStr)")))
-                menu.addItem(.separator())
-            }
         } else {
-            menu.addItem(viewItem(MenuHeaderItemView(title: "Claude Usage")))
             menu.addItem(viewItem(MenuSubtitleItemView("No data yet — run Claude Code first")))
-            menu.addItem(.separator())
         }
 
-        let launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        launchItem.target = self
-        launchItem.state = launchAgent.isEnabled ? .on : .off
-        menu.addItem(launchItem)
         menu.addItem(.separator())
-
         let refresh = NSMenuItem(title: "Refresh", action: #selector(refreshUI), keyEquivalent: "r")
         refresh.target = self
         menu.addItem(refresh)
         let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
+        menu.addItem(.separator())
+        let launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launchItem.target = self
+        launchItem.state = launchAgent.isEnabled ? .on : .off
+        menu.addItem(launchItem)
 
         return menu
+    }
+
+    private func addWindowRows(to menu: NSMenu,
+                               fiveHour: (pct: Double?, resetsAt: Date?),
+                               sevenDay: (pct: Double?, resetsAt: Date?),
+                               sonnetPct: Double?) {
+        if let pct = fiveHour.pct, let date = fiveHour.resetsAt {
+            menu.addItem(viewItem(MenuRateLimitItemView(
+                label: "5-Hour Window", pct: pct,
+                detail: "resets \(timeUntil(date))"
+            )))
+        }
+        if let pct = sevenDay.pct, let date = sevenDay.resetsAt {
+            var detail = "resets \(timeUntil(date))"
+            if let sp = sonnetPct, abs(sp - pct) >= 1 { detail += " · Sonnet \(Int(sp))%" }
+            menu.addItem(viewItem(MenuRateLimitItemView(label: "7-Day Window", pct: pct, detail: detail)))
+        }
+    }
+
+    private func addStaleItem(to menu: NSMenu, updatedAt: Date) {
+        guard Date().timeIntervalSince(updatedAt) > 300 else { return }
+        let fmt = RelativeDateTimeFormatter()
+        fmt.unitsStyle = .full
+        menu.addItem(.separator())
+        menu.addItem(viewItem(MenuSubtitleItemView("Updated \(fmt.localizedString(for: updatedAt, relativeTo: Date()))")))
+    }
+
+    private func planName() -> String {
+        guard let sub = credentials?.claudeAiOauth.subscriptionType else { return "Claude Usage" }
+        switch sub {
+        case "pro": return "Claude Pro"
+        case "max": return "Claude Max"
+        case "team": return "Claude Team"
+        case "enterprise": return "Claude Enterprise"
+        default: return "Claude \(sub.capitalized)"
+        }
     }
 
     private func viewItem(_ view: NSView) -> NSMenuItem {
         let item = NSMenuItem()
         item.view = view
         item.isEnabled = false
-        return item
-    }
-
-    private func sectionHeader(_ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.boldSystemFont(ofSize: NSFont.smallSystemFontSize + 1),
-            .foregroundColor: NSColor.labelColor,
-        ]
-        item.attributedTitle = NSAttributedString(string: title, attributes: attrs)
         return item
     }
 
@@ -436,7 +558,6 @@ extension AppDelegate {
 
 // MARK: - Entry Point
 
-// Prevent multiple instances
 let runningInstances = NSRunningApplication.runningApplications(withBundleIdentifier: "com.usagebar")
 if runningInstances.count > 1 {
     exit(0)
