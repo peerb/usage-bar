@@ -5,7 +5,7 @@ A minimal macOS menu bar app that shows your Anthropic API rate limit usage as t
 ![macOS 12+](https://img.shields.io/badge/macOS-12%2B-black)
 ![Swift](https://img.shields.io/badge/Swift-5.7%2B-orange)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Works with Claude Pro](https://img.shields.io/badge/Claude-Pro-orange)
+![Works with Claude Pro and Max](https://img.shields.io/badge/Claude-Pro%20%26%20Max-orange)
 
 ![UsageBar screenshot](docs/screenshot.png)
 
@@ -56,7 +56,7 @@ Then open the app again.
 
 Run Claude Code at least once — the app reads from `~/.claude/rate_limits_cache.json` which Claude Code writes automatically. Logs are written to `~/.claude/usagebar.log`.
 
-**Claude Max users:** Claude Code does not appear to update the rate limit cache for Max plans. The bars will show stale data. This is a known limitation — Claude Max support is on the roadmap.
+**Claude Max users:** UsageBar reads live usage data directly from the Anthropic API using your Claude Code credentials, so Max plans are fully supported.
 
 ## Forking
 
