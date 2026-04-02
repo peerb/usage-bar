@@ -6,10 +6,13 @@ import Security
 
 private let kMenuWidth: CGFloat = 270
 private let kMenuPadding: CGFloat = 17
+private let kRefreshInterval: TimeInterval = 300
+private let kWarningThreshold: Double = 70
+private let kCriticalThreshold: Double = 90
 
 private func colorForUsage(_ pct: Double) -> NSColor {
-    if pct > 90 { return .systemRed }
-    if pct > 70 { return .systemOrange }
+    if pct > kCriticalThreshold { return .systemRed }
+    if pct > kWarningThreshold { return .systemOrange }
     return .labelColor
 }
 
@@ -356,7 +359,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         credentials = KeychainReader.load()
         refreshUI()
         // OAuth every 5 min, cache fallback reads happen inside refreshUI
-        timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: kRefreshInterval, repeats: true) { [weak self] _ in
             self?.refreshUI()
         }
     }
@@ -400,7 +403,7 @@ extension AppDelegate {
             return
         }
         let maxPct = [fhPct, sdPct].compactMap { $0 }.max() ?? 0
-        statusItem.button?.contentTintColor = maxPct > 70 ? colorForUsage(maxPct) : nil
+        statusItem.button?.contentTintColor = maxPct > kWarningThreshold ? colorForUsage(maxPct) : nil
         statusItem.button?.title = ""
         statusItem.button?.image = makeStatusImage(fhPct: fhPct, sdPct: sdPct)
         statusItem.button?.imagePosition = .imageOnly
@@ -517,7 +520,7 @@ extension AppDelegate {
     }
 
     private func addStaleItem(to menu: NSMenu, updatedAt: Date) {
-        guard Date().timeIntervalSince(updatedAt) > 300 else { return }
+        guard Date().timeIntervalSince(updatedAt) > kRefreshInterval else { return }
         let fmt = RelativeDateTimeFormatter()
         fmt.unitsStyle = .full
         menu.addItem(.separator())
