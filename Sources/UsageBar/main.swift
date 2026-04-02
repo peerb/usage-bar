@@ -7,6 +7,12 @@ import Security
 private let kMenuWidth: CGFloat = 270
 private let kMenuPadding: CGFloat = 17
 
+private func colorForUsage(_ pct: Double) -> NSColor {
+    if pct > 90 { return .systemRed }
+    if pct > 70 { return .systemOrange }
+    return .labelColor
+}
+
 /// Simple progress bar drawn via drawRect to avoid layer timing issues
 final class ProgressBarView: NSView {
     private let progress: CGFloat
@@ -80,7 +86,7 @@ final class MenuRateLimitItemView: NSView {
         pctField.textColor = .labelColor
         pctField.alignment = .right
 
-        let fillColor: NSColor = pct > 90 ? .systemRed : pct > 70 ? .systemOrange : .labelColor
+        let fillColor = colorForUsage(pct)
         let bar = ProgressBarView(progress: CGFloat(pct / 100.0), fillColor: fillColor)
 
         let detailField = NSTextField(labelWithString: detail)
@@ -387,7 +393,7 @@ extension AppDelegate {
             return
         }
         let maxPct = [fhPct, sdPct].compactMap { $0 }.max() ?? 0
-        statusItem.button?.contentTintColor = maxPct > 90 ? .systemRed : maxPct > 70 ? .systemOrange : nil
+        statusItem.button?.contentTintColor = maxPct > 70 ? colorForUsage(maxPct) : nil
         statusItem.button?.title = ""
         statusItem.button?.image = makeStatusImage(fhPct: fhPct, sdPct: sdPct)
         statusItem.button?.imagePosition = .imageOnly
