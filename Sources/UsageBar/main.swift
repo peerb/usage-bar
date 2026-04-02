@@ -206,18 +206,31 @@ final class KeychainReader {
     }
 }
 
-// MARK: - OAuth Usage
+// MARK: - Unified Usage Model
 
-struct OAuthWindow {
+struct UsageWindow {
     let usedPercentage: Double
     let resetsAt: Date
 }
 
-struct OAuthUsage {
-    let fiveHour: OAuthWindow?
-    let sevenDay: OAuthWindow?
-    let sevenDaySonnet: OAuthWindow?
+struct UsageData {
+    let fiveHour: UsageWindow?
+    let sevenDay: UsageWindow?
+    let sevenDaySonnet: UsageWindow?
     let fetchedAt: Date
+}
+
+extension CachedStatus {
+    func toUsageData() -> UsageData? {
+        guard let rl = rateLimits,
+              (rl.fiveHour != nil || rl.sevenDay != nil) else { return nil }
+        return UsageData(
+            fiveHour: rl.fiveHour.map { UsageWindow(usedPercentage: $0.usedPercentage, resetsAt: Date(timeIntervalSince1970: $0.resetsAt)) },
+            sevenDay: rl.sevenDay.map { UsageWindow(usedPercentage: $0.usedPercentage, resetsAt: Date(timeIntervalSince1970: $0.resetsAt)) },
+            sevenDaySonnet: nil,
+            fetchedAt: updatedAt.map { Date(timeIntervalSince1970: $0) } ?? Date()
+        )
+    }
 }
 
 final class OAuthUsageFetcher {
@@ -246,7 +259,7 @@ final class OAuthUsageFetcher {
         return f
     }()
 
-    func fetch(accessToken: String, completion: @escaping (OAuthUsage?) -> Void) {
+    func fetch(accessToken: String, completion: @escaping (UsageData?) -> Void) {
         var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
@@ -256,12 +269,12 @@ final class OAuthUsageFetcher {
                 DispatchQueue.main.async { completion(nil) }
                 return
             }
-            func parse(_ w: Response.Window?) -> OAuthWindow? {
+            func parse(_ w: Response.Window?) -> UsageWindow? {
                 guard let w else { return nil }
                 let date = self.dateFormatter.date(from: w.resetsAt) ?? Date()
-                return OAuthWindow(usedPercentage: w.utilization, resetsAt: date)
+                return UsageWindow(usedPercentage: w.utilization, resetsAt: date)
             }
-            let usage = OAuthUsage(
+            let usage = UsageData(
                 fiveHour: parse(resp.fiveHour),
                 sevenDay: parse(resp.sevenDay),
                 sevenDaySonnet: parse(resp.sevenDaySonnet),
@@ -331,7 +344,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let launchAgent = LaunchAgentManager()
     private let oauthFetcher = OAuthUsageFetcher()
     private var credentials: KeychainReader.Credentials?
-    private var oauthUsage: OAuthUsage?
+    private var oauthUsage: UsageData?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -356,33 +369,26 @@ extension AppDelegate {
         credentials = KeychainReader.load()
 
         // Show last known data immediately
-        updateTitle(fhPct: oauthUsage?.fiveHour?.usedPercentage,
-                    sdPct: oauthUsage?.sevenDay?.usedPercentage)
-        statusItem.menu = makeMenu(cachedStatus: oauthUsage == nil ? cache.load() : nil,
-                                   oauthUsage: oauthUsage)
+        applyUsage(oauthUsage)
 
         // Fetch fresh OAuth data in background, fall back to cache if unavailable
         guard let token = credentials?.claudeAiOauth.accessToken else {
             oauthUsage = nil
-            updateTitle(fhPct: nil, sdPct: nil)
-            statusItem.menu = makeMenu(cachedStatus: cache.load(), oauthUsage: nil)
+            applyUsage(nil)
             return
         }
         oauthFetcher.fetch(accessToken: token) { [weak self] usage in
             guard let self else { return }
-            if let usage {
-                self.oauthUsage = usage
-                self.updateTitle(fhPct: usage.fiveHour?.usedPercentage,
-                                 sdPct: usage.sevenDay?.usedPercentage)
-                self.statusItem.menu = self.makeMenu(cachedStatus: nil, oauthUsage: usage)
-            } else {
-                // OAuth failed — fall back to cache
-                let status = self.cache.load()
-                self.updateTitle(fhPct: status?.rateLimits?.fiveHour?.usedPercentage,
-                                 sdPct: status?.rateLimits?.sevenDay?.usedPercentage)
-                self.statusItem.menu = self.makeMenu(cachedStatus: status, oauthUsage: nil)
-            }
+            self.oauthUsage = usage
+            self.applyUsage(usage)
         }
+    }
+
+    private func applyUsage(_ usage: UsageData?) {
+        let effective = usage ?? cache.load()?.toUsageData()
+        updateTitle(fhPct: effective?.fiveHour?.usedPercentage,
+                    sdPct: effective?.sevenDay?.usedPercentage)
+        statusItem.menu = makeMenu(usage: effective, cachedStatus: usage == nil ? cache.load() : nil)
     }
 
     func updateTitle(fhPct: Double?, sdPct: Double?) {
@@ -442,43 +448,24 @@ extension AppDelegate {
 // MARK: - Menu
 
 extension AppDelegate {
-    func makeMenu(cachedStatus: CachedStatus?, oauthUsage: OAuthUsage?) -> NSMenu {
+    func makeMenu(usage: UsageData?, cachedStatus: CachedStatus?) -> NSMenu {
         let menu = NSMenu()
         menu.addItem(viewItem(MenuHeaderItemView(title: planName())))
 
-        if let usage = oauthUsage {
-            addWindowRows(to: menu,
-                fiveHour: (usage.fiveHour?.usedPercentage, usage.fiveHour?.resetsAt),
-                sevenDay: (usage.sevenDay?.usedPercentage, usage.sevenDay?.resetsAt),
-                sonnetPct: usage.sevenDaySonnet?.usedPercentage
-            )
+        if let usage {
+            addWindowRows(to: menu, usage: usage)
             addStaleItem(to: menu, updatedAt: usage.fetchedAt)
 
+            // Show session metadata from cache when OAuth doesn't provide it
+            if let status = cachedStatus {
+                addSessionInfo(to: menu, status: status)
+            }
         } else if let status = cachedStatus {
-            if let rl = status.rateLimits {
-                addWindowRows(to: menu,
-                    fiveHour: (rl.fiveHour?.usedPercentage, rl.fiveHour.map { Date(timeIntervalSince1970: $0.resetsAt) }),
-                    sevenDay: (rl.sevenDay?.usedPercentage, rl.sevenDay.map { Date(timeIntervalSince1970: $0.resetsAt) }),
-                    sonnetPct: nil
-                )
-            } else {
-                menu.addItem(viewItem(MenuSubtitleItemView("No rate limit data yet")))
-            }
-            if let model = status.model?.displayName,
-               let ctxPct = status.contextWindow?.usedPercentage {
-                menu.addItem(.separator())
-                menu.addItem(viewItem(MenuSubtitleItemView("Last Session")))
-                menu.addItem(viewItem(MenuSubtitleItemView(model)))
-                if let cost = status.cost?.totalCostUsd {
-                    menu.addItem(viewItem(MenuSubtitleItemView(String(format: "Context %.0f%%  ·  $%.4f", ctxPct, cost))))
-                } else {
-                    menu.addItem(viewItem(MenuSubtitleItemView(String(format: "Context %.0f%%", ctxPct))))
-                }
-            }
+            menu.addItem(viewItem(MenuSubtitleItemView("No rate limit data yet")))
+            addSessionInfo(to: menu, status: status)
             if let updatedAt = status.updatedAt {
                 addStaleItem(to: menu, updatedAt: Date(timeIntervalSince1970: updatedAt))
             }
-
         } else {
             menu.addItem(viewItem(MenuSubtitleItemView("No data yet — run Claude Code first")))
         }
@@ -499,20 +486,32 @@ extension AppDelegate {
         return menu
     }
 
-    private func addWindowRows(to menu: NSMenu,
-                               fiveHour: (pct: Double?, resetsAt: Date?),
-                               sevenDay: (pct: Double?, resetsAt: Date?),
-                               sonnetPct: Double?) {
-        if let pct = fiveHour.pct, let date = fiveHour.resetsAt {
+    private func addWindowRows(to menu: NSMenu, usage: UsageData) {
+        if let w = usage.fiveHour {
             menu.addItem(viewItem(MenuRateLimitItemView(
-                label: "5-Hour Window", pct: pct,
-                detail: "resets \(timeUntil(date))"
+                label: "5-Hour Window", pct: w.usedPercentage,
+                detail: "resets \(timeUntil(w.resetsAt))"
             )))
         }
-        if let pct = sevenDay.pct, let date = sevenDay.resetsAt {
-            var detail = "resets \(timeUntil(date))"
-            if let sp = sonnetPct, abs(sp - pct) >= 1 { detail += " · Sonnet \(Int(sp))%" }
-            menu.addItem(viewItem(MenuRateLimitItemView(label: "7-Day Window", pct: pct, detail: detail)))
+        if let w = usage.sevenDay {
+            var detail = "resets \(timeUntil(w.resetsAt))"
+            if let sp = usage.sevenDaySonnet?.usedPercentage, abs(sp - w.usedPercentage) >= 1 {
+                detail += " · Sonnet \(Int(sp))%"
+            }
+            menu.addItem(viewItem(MenuRateLimitItemView(label: "7-Day Window", pct: w.usedPercentage, detail: detail)))
+        }
+    }
+
+    private func addSessionInfo(to menu: NSMenu, status: CachedStatus) {
+        guard let model = status.model?.displayName,
+              let ctxPct = status.contextWindow?.usedPercentage else { return }
+        menu.addItem(.separator())
+        menu.addItem(viewItem(MenuSubtitleItemView("Last Session")))
+        menu.addItem(viewItem(MenuSubtitleItemView(model)))
+        if let cost = status.cost?.totalCostUsd {
+            menu.addItem(viewItem(MenuSubtitleItemView(String(format: "Context %.0f%%  ·  $%.4f", ctxPct, cost))))
+        } else {
+            menu.addItem(viewItem(MenuSubtitleItemView(String(format: "Context %.0f%%", ctxPct))))
         }
     }
 
