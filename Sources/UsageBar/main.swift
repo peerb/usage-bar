@@ -385,10 +385,11 @@ extension AppDelegate {
     }
 
     private func applyUsage(_ usage: UsageData?) {
-        let effective = usage ?? cache.load()?.toUsageData()
+        let cached = usage == nil ? cache.load() : nil
+        let effective = usage ?? cached?.toUsageData()
         updateTitle(fhPct: effective?.fiveHour?.usedPercentage,
                     sdPct: effective?.sevenDay?.usedPercentage)
-        statusItem.menu = makeMenu(usage: effective, cachedStatus: usage == nil ? cache.load() : nil)
+        statusItem.menu = makeMenu(usage: effective, cachedStatus: cached)
     }
 
     func updateTitle(fhPct: Double?, sdPct: Double?) {
