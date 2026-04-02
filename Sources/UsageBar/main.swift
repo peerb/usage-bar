@@ -256,7 +256,7 @@ final class OAuthUsageFetcher {
         }
     }
 
-    private let dateFormatter: ISO8601DateFormatter = {
+    private static let dateFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
@@ -266,7 +266,7 @@ final class OAuthUsageFetcher {
         var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+        URLSession.shared.dataTask(with: request) { data, response, error in
             if let error {
                 NSLog("[UsageBar] OAuth fetch failed: %@", error.localizedDescription)
             }
@@ -274,7 +274,7 @@ final class OAuthUsageFetcher {
             if let statusCode, statusCode != 200 {
                 NSLog("[UsageBar] OAuth fetch returned HTTP %d", statusCode)
             }
-            guard let self, let data else {
+            guard let data else {
                 DispatchQueue.main.async { completion(nil) }
                 return
             }
@@ -288,7 +288,7 @@ final class OAuthUsageFetcher {
             }
             func parse(_ w: Response.Window?) -> UsageWindow? {
                 guard let w else { return nil }
-                let date = self.dateFormatter.date(from: w.resetsAt) ?? Date()
+                let date = OAuthUsageFetcher.dateFormatter.date(from: w.resetsAt) ?? Date()
                 return UsageWindow(usedPercentage: w.utilization, resetsAt: date)
             }
             let usage = UsageData(
