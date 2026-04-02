@@ -12,6 +12,9 @@ echo "Building $BINARY_NAME..."
 cd "$SCRIPT_DIR"
 swift build -c release
 
+echo "Stopping running instance..."
+pkill -x "$BINARY_NAME" 2>/dev/null && sleep 1 || true
+
 echo "Installing to $BUNDLE..."
 mkdir -p "$BUNDLE/Contents/MacOS"
 mkdir -p "$BUNDLE/Contents/Resources"
