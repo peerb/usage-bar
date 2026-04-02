@@ -39,20 +39,25 @@ final class ProgressBarView: NSView {
     }
 }
 
+/// Creates a centered label pinned to the edges of its parent view with standard menu padding
+private func addCenteredLabel(to parent: NSView, text: String, font: NSFont, color: NSColor) {
+    let label = NSTextField(labelWithString: text)
+    label.font = font
+    label.textColor = color
+    label.translatesAutoresizingMaskIntoConstraints = false
+    parent.addSubview(label)
+    NSLayoutConstraint.activate([
+        label.leadingAnchor.constraint(equalTo: parent.leadingAnchor, constant: kMenuPadding),
+        label.trailingAnchor.constraint(equalTo: parent.trailingAnchor, constant: -kMenuPadding),
+        label.centerYAnchor.constraint(equalTo: parent.centerYAnchor),
+    ])
+}
+
 /// Top header row: bold title
 final class MenuHeaderItemView: NSView {
     init(title: String) {
         super.init(frame: NSRect(x: 0, y: 0, width: kMenuWidth, height: 50))
-        let tl = NSTextField(labelWithString: title)
-        tl.font = .boldSystemFont(ofSize: 14)
-        tl.textColor = .labelColor
-        tl.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(tl)
-        NSLayoutConstraint.activate([
-            tl.leadingAnchor.constraint(equalTo: leadingAnchor, constant: kMenuPadding),
-            tl.centerYAnchor.constraint(equalTo: centerYAnchor),
-            tl.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -kMenuPadding),
-        ])
+        addCenteredLabel(to: self, text: title, font: .boldSystemFont(ofSize: 14), color: .labelColor)
     }
     required init?(coder: NSCoder) { fatalError() }
 }
@@ -60,17 +65,8 @@ final class MenuHeaderItemView: NSView {
 /// Secondary gray text row
 final class MenuSubtitleItemView: NSView {
     init(_ text: String) {
-        let lbl = NSTextField(labelWithString: text)
-        lbl.font = .systemFont(ofSize: 13)
-        lbl.textColor = .labelColor.withAlphaComponent(0.75)
-        lbl.translatesAutoresizingMaskIntoConstraints = false
         super.init(frame: NSRect(x: 0, y: 0, width: kMenuWidth, height: 18))
-        addSubview(lbl)
-        NSLayoutConstraint.activate([
-            lbl.leadingAnchor.constraint(equalTo: leadingAnchor, constant: kMenuPadding),
-            lbl.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -kMenuPadding),
-            lbl.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
+        addCenteredLabel(to: self, text: text, font: .systemFont(ofSize: 13), color: .labelColor.withAlphaComponent(0.75))
     }
     required init?(coder: NSCoder) { fatalError() }
 }
