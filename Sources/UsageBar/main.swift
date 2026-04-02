@@ -347,6 +347,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate {
     @objc func refreshUI() {
+        credentials = KeychainReader.load()
+
         // Show last known data immediately
         updateTitle(fhPct: oauthUsage?.fiveHour?.usedPercentage,
                     sdPct: oauthUsage?.sevenDay?.usedPercentage)
@@ -354,7 +356,12 @@ extension AppDelegate {
                                    oauthUsage: oauthUsage)
 
         // Fetch fresh OAuth data in background, fall back to cache if unavailable
-        guard let token = credentials?.claudeAiOauth.accessToken else { return }
+        guard let token = credentials?.claudeAiOauth.accessToken else {
+            oauthUsage = nil
+            updateTitle(fhPct: nil, sdPct: nil)
+            statusItem.menu = makeMenu(cachedStatus: cache.load(), oauthUsage: nil)
+            return
+        }
         oauthFetcher.fetch(accessToken: token) { [weak self] usage in
             guard let self else { return }
             if let usage {
