@@ -266,9 +266,23 @@ final class OAuthUsageFetcher {
         var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-        URLSession.shared.dataTask(with: request) { [weak self] data, _, _ in
-            guard let self, let data,
-                  let resp = try? JSONDecoder().decode(Response.self, from: data) else {
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            if let error {
+                NSLog("[UsageBar] OAuth fetch failed: %@", error.localizedDescription)
+            }
+            let statusCode = (response as? HTTPURLResponse)?.statusCode
+            if let statusCode, statusCode != 200 {
+                NSLog("[UsageBar] OAuth fetch returned HTTP %d", statusCode)
+            }
+            guard let self, let data else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            let resp: Response
+            do {
+                resp = try JSONDecoder().decode(Response.self, from: data)
+            } catch {
+                NSLog("[UsageBar] OAuth response decode failed: %@", error.localizedDescription)
                 DispatchQueue.main.async { completion(nil) }
                 return
             }
@@ -329,11 +343,18 @@ final class LaunchAgentManager {
     }
 
     private func launchctl(_ args: String...) {
-        let p = Process()
-        p.launchPath = "/bin/launchctl"
-        p.arguments = args
-        try? p.run()
-        p.waitUntilExit()
+        let process = Process()
+        process.launchPath = "/bin/launchctl"
+        process.arguments = args
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if process.terminationStatus != 0 {
+                NSLog("[UsageBar] launchctl %@ exited with status %d", args.joined(separator: " "), process.terminationStatus)
+            }
+        } catch {
+            NSLog("[UsageBar] launchctl %@ failed: %@", args.joined(separator: " "), error.localizedDescription)
+        }
     }
 }
 
