@@ -2,6 +2,24 @@
 
 All notable changes to UsageBar are documented here.
 
+## [1.0.4] - 2026-04-02
+
+### Added
+- Error logging for OAuth fetch failures and LaunchAgent operations (visible in `~/.claude/usagebar.log`)
+
+### Changed
+- Credentials are now reloaded from Keychain on every refresh — no restart needed after re-login
+- UI resets cleanly when OAuth token is unavailable instead of showing stale data
+- Install script stops the running instance before overwriting the binary
+- Unified internal data model for OAuth and cache rate limit data
+- Extracted shared constants for refresh interval and color thresholds
+- Deduplicated label setup code in menu item views
+- Made ISO8601 date formatter static for efficiency
+
+### Fixed
+- Cache file was read twice per refresh cycle instead of once
+- Info.plist version was stuck at 1.0 instead of matching the release version
+
 ## [1.0.3] - 2026-04-02
 
 ### Added
