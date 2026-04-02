@@ -17,15 +17,19 @@ UsageBar is a single-file macOS menu bar app (`Sources/UsageBar/main.swift`) tha
 
 **Data flow:**
 ```
-~/.claude/rate_limits_cache.json → StatusCache → CachedStatus → refreshUI() → NSStatusItem
+Primary:   Keychain credentials → OAuthUsageFetcher → UsageData → refreshUI() → NSStatusItem
+Fallback:  ~/.claude/rate_limits_cache.json → StatusCache → CachedStatus → UsageData → refreshUI()
 ```
 
-The cache file is written by Claude Code; this app only reads it. A 30-second `Timer` drives all UI updates — there are no network calls.
+OAuth usage data is fetched every 5 minutes via `OAuthUsageFetcher`. When credentials are unavailable or the fetch fails, the app falls back to reading Claude Code's local cache file.
 
 **Key components in `main.swift`:**
 
 - **Custom NSView subclasses** — `ProgressBarView`, `MenuHeaderItemView`, `MenuSubtitleItemView`, `MenuRateLimitItemView` — used as embedded views inside NSMenuItems
+- **Unified model** — `UsageData`, `UsageWindow` — common representation for both OAuth and cache data
 - **Codable structs** — `CachedStatus`, `RateLimits`, `RateLimitWindow`, `ModelInfo`, `ContextWindow`, `CostInfo` — mirror the JSON schema of the cache file
+- **`OAuthUsageFetcher`** — fetches live usage data from the Anthropic OAuth API
+- **`KeychainReader`** — reads Claude Code OAuth credentials from the macOS Keychain
 - **`StatusCache`** — reads and decodes `~/.claude/rate_limits_cache.json`
 - **`LaunchAgentManager`** — generates and manages `~/Library/LaunchAgents/com.usagebar.plist` for login auto-start
 - **`AppDelegate`** — owns the `NSStatusItem`, refresh timer, and delegates to `makeStatusImage()` and `makeMenu()`
